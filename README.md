@@ -4,6 +4,9 @@ Play fast, muted, looping video wallpapers through Omarchy's familiar
 **Style → Background** picker. The plugin keeps the stock background service
 and adds video support without starting another Quickshell process.
 
+
+![Live Wallpaper screen editor: one video spanned across two monitors, another on the third](preview.png)
+
 ## Quick start
 
 1. Copy an MP4, MKV, WebM, MOV, or M4V file into your current theme's folder:
