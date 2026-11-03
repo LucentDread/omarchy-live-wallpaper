@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "lucentdread.live-wallpaper",
+  "name": "Live Wallpaper",
+  "version": "1.0.0",
+  "author": "LucentDread",
+  "description": "Video wallpapers per monitor: follow Style > Background, give each screen its own video or image, or stretch one across neighbouring screens.",
+  "kinds": [
+    "service",
+    "panel",
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "service": "Service.qml",
+    "panel": "Settings.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Live Wallpaper",
+    "description": "Opens the per-monitor live wallpaper editor",
+    "category": "Appearance",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
