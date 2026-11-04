@@ -33,6 +33,8 @@ part of the desktop to open the picker.
 - Spanning: stretch one video or image across neighbouring screens, laid out
   exactly as Hyprland arranges them, with followers kept in sync with a leader
 - A screen editor you open from the bar, the Omarchy menu, or the CLI
+- Pauses a screen's video while a fullscreen app covers it, and resumes when
+  it leaves (can be turned off)
 - Reveals video only after the first valid frame, preventing black flashes
 - Generates picker previews with Omarchy's existing `ffmpeg` installation
 - Keeps a static poster as the lock-screen and transition fallback
@@ -69,6 +71,15 @@ The editor lists videos and images from every folder under
 theme. Per-monitor choices survive theme switches and shell restarts; only
 screens on **Follow picker** react to Style → Background.
 
+### Fullscreen apps
+
+While a fullscreen app (a game, a video, `Super+F`) covers a screen, that
+screen's video pauses on its last frame and stops decoding; it resumes as
+soon as the app leaves fullscreen or you switch workspace. Maximized windows
+do not pause it, since the wallpaper still shows around the bar and gaps. In a
+span, only the covered screens pause; they catch up with the others when they
+resume. Turn it off with **Pause behind fullscreen** in the editor's header.
+
 The layout lives in `~/.local/state/omarchy/live-wallpaper/layout.json` and can
 also be driven over IPC:
 
@@ -79,6 +90,7 @@ omarchy-shell lucentdread.live-wallpaper span DP-1,DP-2 ~/.config/omarchy/backgr
 omarchy-shell lucentdread.live-wallpaper setFit DP-1,DP-2 fit
 omarchy-shell lucentdread.live-wallpaper setScreen HDMI-A-1 none ""
 omarchy-shell lucentdread.live-wallpaper resetLayout
+omarchy-shell lucentdread.live-wallpaper pauseOnFullscreen false
 ```
 
 ### Bar icon

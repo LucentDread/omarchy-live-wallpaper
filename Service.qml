@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
@@ -34,9 +35,10 @@ Item {
   //   screens.<name>: { mode: "picker" | "none" | "media", path, fit }
   //                   { mode: "span", span: "<span id>" }
   //   spans.<id>:     { path, fit, screens: [names in order] }
+  //   options:        { pauseOnFullscreen: true }
   // A span stretches one video or image over the bounding box of its screens,
   // like a single canvas laid across neighbouring monitors.
-  property var layout: ({ version: 1, screens: {}, spans: {} })
+  property var layout: ({ version: 1, screens: {}, spans: {}, options: { pauseOnFullscreen: true } })
   property int layoutRevision: 0
   // Bumped when monitors are added, removed or moved so span geometry updates.
   property int screenRevision: 0
@@ -165,7 +167,7 @@ Item {
   }
 
   function emptyLayout() {
-    return { version: 1, screens: {}, spans: {} }
+    return { version: 1, screens: {}, spans: {}, options: { pauseOnFullscreen: true } }
   }
 
   function copyLayout(src) {
@@ -177,6 +179,8 @@ Item {
   function normalizeLayout(raw) {
     var out = emptyLayout()
     if (!isPlainObject(raw)) return out
+    if (isPlainObject(raw.options) && raw.options.pauseOnFullscreen === false)
+      out.options.pauseOnFullscreen = false
 
     var spans = isPlainObject(raw.spans) ? raw.spans : {}
     for (var id in spans) {
@@ -369,7 +373,33 @@ Item {
   }
 
   function resetLayout() {
-    saveLayout(emptyLayout())
+    var next = emptyLayout()
+    next.options = copyLayout(layout).options || next.options
+    saveLayout(next)
+  }
+
+  function setPauseOnFullscreen(enabled) {
+    var next = copyLayout(layout)
+    next.options = next.options || {}
+    next.options.pauseOnFullscreen = enabled === true
+    saveLayout(next)
+  }
+
+  // Fullscreen (Hyprland mode 2 or 3) window on a screen's active workspace,
+  // read the same way the Omarchy dock does. Maximized windows (mode 1) leave
+  // the wallpaper visible around the bar and gaps, so they do not count.
+  function fullscreenOn(screen) {
+    var monitor = screen ? Hyprland.monitorFor(screen) : null
+    var workspace = monitor ? monitor.activeWorkspace : null
+    if (!workspace) return false
+    var toplevels = Hyprland.toplevels.values
+    for (var i = 0; i < toplevels.length; i++) {
+      var toplevel = toplevels[i]
+      if (!toplevel.workspace || toplevel.workspace.id !== workspace.id) continue
+      var ipc = toplevel.lastIpcObject
+      if (ipc && ipc.fullscreen >= 2) return true
+    }
+    return false
   }
 
   function screensJson() {
@@ -398,6 +428,18 @@ Item {
   Connections {
     target: Quickshell
     function onScreensChanged() { root.screenRevision += 1 }
+  }
+
+  // Hyprland's window and workspace lists do not follow fullscreen on their
+  // own; refresh them when it toggles, as the Omarchy dock does.
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (event && String(event.name) === "fullscreen") {
+        Hyprland.refreshWorkspaces()
+        Hyprland.refreshToplevels()
+      }
+    }
   }
 
   // Watchdogs: abort hung processes after 15s
@@ -506,7 +548,10 @@ Item {
         readyScreens: Object.keys(root.readyScreens).length,
         revealed: root.revealVideo,
         generation: root.playGeneration,
-        layout: root.layout
+        layout: root.layout,
+        pausedScreens: Object.keys(root.players).filter(function(name) {
+          return root.players[name].playbackState === MediaPlayer.PausedState
+        })
       })
     }
     // Connected monitors with their geometry and resolved assignment.
@@ -521,6 +566,10 @@ Item {
     }
     function setFit(names: string, fit: string): string {
       return root.setFit(names, fit) ? "ok" : "invalid"
+    }
+    function pauseOnFullscreen(enabled: string): string {
+      root.setPauseOnFullscreen(enabled === "true")
+      return "ok"
     }
     function resetLayout(): string {
       root.resetLayout()
@@ -553,6 +602,9 @@ Item {
       readonly property bool isImage: sourcePath !== "" && root.isImagePath(sourcePath)
         && root.isValidMediaPath(sourcePath)
       readonly property bool reveal: followsPicker ? root.revealVideo : true
+      // A fullscreen app hides the wallpaper; stop decoding until it leaves.
+      readonly property bool covered: root.layout.options.pauseOnFullscreen !== false
+        && root.fullscreenOn(modelData)
       readonly property string fit: followsPicker ? "crop" : root.validFit(assignment.fit)
       readonly property bool isSpanLeader: spanned && root.spanLeader(assignment.span) === screenName
       // A new key restarts the player. Picker screens restart on every global
@@ -611,7 +663,18 @@ Item {
         }
       }
 
+      // Play only while revealed and not hidden behind a fullscreen app. A
+      // paused player keeps its last frame on screen.
+      function updatePlayback() {
+        if (!isVideo || !frameDecoded) return
+        var shouldPlay = reveal && !covered
+        if (shouldPlay && player.playbackState !== MediaPlayer.PlayingState) player.play()
+        else if (!shouldPlay && player.playbackState === MediaPlayer.PlayingState) player.pause()
+      }
+
       onLoadKeyChanged: Qt.callLater(syncPlayer)
+      onCoveredChanged: updatePlayback()
+      onRevealChanged: updatePlayback()
       onIsSpanLeaderChanged: if (isSpanLeader) player.playbackRate = 1
 
       screen: modelData
@@ -637,7 +700,7 @@ Item {
       Timer {
         interval: 1000
         repeat: true
-        running: panel.spanned && panel.isVideo && panel.frameDecoded && !panel.isSpanLeader
+        running: panel.spanned && panel.isVideo && panel.frameDecoded && !panel.isSpanLeader && !panel.covered
         onTriggered: panel.followLeader()
       }
 
@@ -686,17 +749,9 @@ Item {
             cache: false
             source: panel.isImage && root.extensionOf(panel.sourcePath) === "gif" ? root.fileUrl(panel.sourcePath) : ""
             fillMode: still.fillMode
-            playing: visible
+            playing: visible && !panel.covered
             visible: source !== "" && status === AnimatedImage.Ready
           }
-        }
-      }
-
-      Connections {
-        target: root
-        function onRevealVideoChanged() {
-          if (panel.followsPicker && root.revealVideo && panel.frameDecoded)
-            player.play()
         }
       }
 
@@ -706,7 +761,7 @@ Item {
           if (panel.isVideo && !panel.frameDecoded
               && panel.acceptedGeneration === panel.playerGeneration) {
             panel.frameDecoded = true
-            if (!panel.reveal) player.pause()
+            if (!panel.reveal || panel.covered) player.pause()
             root.markFrameReady(panel.screenName)
           }
         }

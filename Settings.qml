@@ -321,12 +321,28 @@ Item {
           }
 
           Chip {
-
+            id: closeChip
             theme: root
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             label: "✕"
             onClicked: root.dismiss()
+          }
+
+          // Global: paused players keep their last frame while a fullscreen
+          // app covers their screen.
+          Chip {
+            theme: root
+            anchors.right: closeChip.left
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            readonly property bool pauseOn: {
+              var dummy = root.revision
+              return !root.svc || !root.svc.layout.options || root.svc.layout.options.pauseOnFullscreen !== false
+            }
+            label: pauseOn ? "Pause behind fullscreen: on" : "Pause behind fullscreen: off"
+            active: pauseOn
+            onClicked: if (root.svc) root.svc.setPauseOnFullscreen(!pauseOn)
           }
         }
 
@@ -452,7 +468,6 @@ Item {
           spacing: 8
 
           Chip {
-
             theme: root
             label: "Follow picker"
             active: root.selected.length > 0 && root.selected.every(function(n) {
@@ -498,7 +513,6 @@ Item {
           Item { width: 16; height: 1 }
 
           Chip {
-
             theme: root
             label: "Select all"
             onClicked: root.selectAll()
