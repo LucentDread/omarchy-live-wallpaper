@@ -154,6 +154,16 @@ the menu override. It can also be removed manually without disabling playback:
 omarchy plugin update lucentdread.live-wallpaper
 ```
 
+Then restart the shell so the new version takes over:
+
+```bash
+omarchy-restart-shell
+```
+
+The shell's automatic reload can leave the running wallpaper service on the
+old code, so new features (such as editor buttons or IPC commands) only
+appear after the restart.
+
 ## Remove
 
 Standard removal performs complete cleanup before deleting the plugin. It stops
